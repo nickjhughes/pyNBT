@@ -49,46 +49,65 @@ class TAG_Basic(TAG):
         
         return cls(data, name), bytes_read
     
-    def write(self):
+    def write(self, type_byte=True):
         """ Return a binary string ready for writing to file. """
         
+        string = ''
+        if type_byte:
+            string += struct.pack('>b', self.byte)
         if self.name:
-            
+            string += self.name.write(False)
+        string += struct.pack('>' + self.format, self.data)
+        return string
 
 class TAG_Byte(TAG_Basic):
     
+    byte = 1
     size = 1
     format = 'b'
 
 class TAG_Short(TAG_Basic):
     
+    byte = 2
     size = 2
     format = 'h'
 
 class TAG_Int(TAG_Basic):
     
+    byte = 3
     size = 4
     format = 'i'
 
 class TAG_Long(TAG_Basic):
     
+    byte = 4
     size = 8
     format = 'q'
 
 class TAG_Float(TAG_Basic):
     
+    byte = 5
     size = 4
     format = 'f'
 
 class TAG_Double(TAG_Basic):
     
+    byte = 6
     size = 8
     format = 'd'
 
 
 class TAG_String(TAG):
     
+    byte = 8
     length_type = TAG_Short
+    
+    def __init__(self, data, name=None):
+        """ Create a new TAG_String with the given data, length and optional
+        name. """
+        
+        self.length, self.data = data
+        self.name = name
     
     @classmethod
     def read(cls, stream, named=False):
@@ -106,8 +125,8 @@ class TAG_String(TAG):
             name = None
         
         # Get string size
-        size_byte, bytes = cls.length_type.read(stream, False)
-        size = size_byte.data
+        length, bytes = cls.length_type.read(stream, False)
+        size = length.data
         stream = stream[bytes:]
         bytes_read += bytes
         
@@ -115,10 +134,23 @@ class TAG_String(TAG):
         string = stream[:size]
         bytes_read += size
         
-        return cls(string, name), bytes_read
+        return cls((length, string), name), bytes_read
+    
+    def write(self, type_byte=True):
+        """ Return a binary string ready for writing to file. """
+        
+        string = ''
+        if type_byte:
+            string += struct.pack('>b', self.byte)
+        if self.name:
+            string += self.name.write(False)
+        string += self.length.write(False)
+        string += self.data
+        return string
 
 class TAG_List(TAG):
     
+    byte = 9
     id_size = 1
     id_format = 'b'
     length_type = TAG_Int
@@ -167,6 +199,20 @@ class TAG_List(TAG):
         
         return cls((length, tag_type, entries), name), bytes_read
     
+    def write(self, type_byte=True):
+        """ Return a binary string ready for writing to file. """
+        
+        string = ''
+        if type_byte:
+            string += struct.pack('>b', self.byte)
+        if self.name:
+            string += self.name.write(False)
+        string += TAG_Byte(self.type.byte).write(False)
+        string += self.length.write(False)
+        for entry in self.entries:
+            string += entry.write(False)
+        return string
+    
     def __str__(self):
         if self.name:
             string = self.__class__.__name__ + '("' + self.name.data + '"): '
@@ -174,13 +220,14 @@ class TAG_List(TAG):
             string = self.__class__.__name__ + ': '
         string += str(self.length.data) + ' entries of type ' + self.type.__name__ + '\n'
         string += '{\n'
-        for i in xrange(self.length.data):
-            string += str(self.entries[i]) + '\n'
+        for entry in self.entries:
+            string += str(entry) + '\n'
         string += '}'
         return string
 
 class TAG_Byte_Array(TAG):
     
+    byte = 7
     length_type = TAG_Int
     byte_type = TAG_Byte
     
@@ -221,6 +268,19 @@ class TAG_Byte_Array(TAG):
         
         return cls((length, bytes_array), name), bytes_read
     
+    def write(self, type_byte=True):
+        """ Return a binary string ready for writing to file. """
+        
+        string = ''
+        if type_byte:
+            string += struct.pack('>b', self.byte)
+        if self.name:
+            string += self.name.write(False)
+        string += self.length.write(False)
+        for byte in self.bytes_array:
+            string += byte.write(False)
+        return string
+    
     def __str__(self):
         if self.name:
             string = self.__class__.__name__ + '("' + self.name.data + '"): '
@@ -230,6 +290,8 @@ class TAG_Byte_Array(TAG):
         return string
 
 class TAG_Compound(TAG):
+    
+    byte = 10
     
     def __init__(self, data, name=None):
         """ Create a new TAG_Compound with the given entries, and optionally
@@ -262,7 +324,10 @@ class TAG_Compound(TAG):
             tag_type, bytes = get_tag_type(stream)
             bytes_read += bytes
             stream = stream[bytes:]
-            if tag_type == TAG_End: break
+            # End of compound tag
+            if tag_type == TAG_End:
+                entries.append(TAG_End())
+                break
             # Tag data
             entry, bytes = tag_type.read(stream, True)
             entries.append(entry)
@@ -271,6 +336,18 @@ class TAG_Compound(TAG):
         
         return cls(entries, name), bytes_read
     
+    def write(self, type_byte=True):
+        """ Return a binary string ready for writing to file. """
+        
+        string = ''
+        if type_byte:
+            string += struct.pack('>b', self.byte)
+        if self.name:
+            string += self.name.write(False)
+        for entry in self.entries:
+            string += entry.write()
+        return string
+    
     def __str__(self):
         if self.name:
             string = self.__class__.__name__ + '("' + self.name.data + '"): '
@@ -278,13 +355,28 @@ class TAG_Compound(TAG):
             string = self.__class__.__name__ + ': '
         string += str(self.length) + ' entries\n'
         string += '{\n'
-        for i in xrange(self.length):
-            string += str(self.entries[i]) + '\n'
+        for entry in self.entries:
+            string += str(entry) + '\n'
         string += '}'
         return string
 
 class TAG_End(TAG):
-    pass
+    
+    byte = 0
+    
+    def __init__(self):
+        """ Create a new TAG_End. """
+        
+        pass
+    
+    def write(self):
+        """ Return a binary string ready for writing to file. """
+        
+        string = struct.pack('>b', self.byte)
+        return string
+    
+    def __str__(self):
+        return 'TAG_End'
 
 
 ### TAG types ##################################################################
