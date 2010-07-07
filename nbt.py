@@ -298,7 +298,7 @@ class TAG_Compound(TAG):
         a name. """
         
         self.entries = data
-        self.length = len(self.entries)
+        self.length = len(self.entries) - 1 # don't include TAG_End
         self.name = name
     
     @classmethod
