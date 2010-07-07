@@ -2,35 +2,47 @@
 import struct
 
 
-### TAG classes ################################################################
+### TAG Handlers ###############################################################
 
 class TAG(object):
-    """ Super class for all the TAG types. """
+    
+    """ General TAG class, super class of all the other TAG handlers. """
     
     def __init__(self, data, name=None):
-        """ Create a new TAG with the given data and optional name. """
+        """ Create a new TAG with the given data and optional name. Name must be
+        an instance of TAG_String. """
         
         self.data = data
         self.name = name
     
-    def __str__(self):
-        """ Standard string representation of TAG. """
+    def write(self, type_byte=True):
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
+        string = ''
+        if type_byte:
+            string += struct.pack('>b', self.byte)
         if self.name:
-            return self.__class__.__name__ + '("' + self.name.data + '"): ' + str(self.data)
+            string += self.name.write(False)
+        return string
+    
+    def __str__(self):
+        if self.name:
+            string = '%s("%s"): %s' % (self.__class__.__name__, self.name.data,
+                                       str(self.data))
         else:
-            return self.__class__.__name__ + ': ' + str(self.data)
-
+            string = '%s: %s' % (self.__class__.__name__, str(self.data))
+        return string
 
 class TAG_Basic(TAG):
     
-    """ Super class for basic TAG types (like short, int, byte, etc.). """
+    """ General basic data type TAG handler, super class of all basic TAG
+    handlers (e.g., byte, short, int, etc). """
     
     @classmethod
     def read(cls, stream, named=False):
-        """ Read a TAG_Basic from the start of the given stream. Return an
-        instance of TAG_Basic represnting the read TAG, and the number of bytes
-        read. """
+        """ Return an instance of the class as read from the start of the given
+        stream, as well as the number of bytes read from the steam. """
         
         bytes_read = 0
         
@@ -50,13 +62,10 @@ class TAG_Basic(TAG):
         return cls(data, name), bytes_read
     
     def write(self, type_byte=True):
-        """ Return a binary string ready for writing to file. """
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
-        string = ''
-        if type_byte:
-            string += struct.pack('>b', self.byte)
-        if self.name:
-            string += self.name.write(False)
+        string = TAG.write(self, type_byte)
         string += struct.pack('>' + self.format, self.data)
         return string
 
@@ -103,16 +112,17 @@ class TAG_String(TAG):
     length_type = TAG_Short
     
     def __init__(self, data, name=None):
-        """ Create a new TAG_String with the given data, length and optional
-        name. """
+        """ Create a new TAG_String with the given data and optional name. Data
+        must be a pair of TAG_Short (length of the string) and the string
+        itself. Name must be an instance of TAG_String. """
         
         self.length, self.data = data
         self.name = name
     
     @classmethod
     def read(cls, stream, named=False):
-        """ Read a TAG_String from the start of the given stream. Return the
-        TAG_String instance and the number of bytes read. """
+        """ Return an instance of the class as read from the start of the given
+        stream, as well as the number of bytes read from the steam. """
         
         bytes_read = 0
         
@@ -137,13 +147,10 @@ class TAG_String(TAG):
         return cls((length, string), name), bytes_read
     
     def write(self, type_byte=True):
-        """ Return a binary string ready for writing to file. """
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
-        string = ''
-        if type_byte:
-            string += struct.pack('>b', self.byte)
-        if self.name:
-            string += self.name.write(False)
+        string = TAG.write(self, type_byte)
         string += self.length.write(False)
         string += self.data
         return string
@@ -156,17 +163,17 @@ class TAG_List(TAG):
     length_type = TAG_Int
     
     def __init__(self, data, name=None):
-        """ Create a new TAG_List with the given length (number of elements),
-        tag type and optionally a name. """
+        """ Create a new TAG_List with the given data and optional name. Data
+        must be a triple of TAG_Int (length of the list), type as a class, and
+        the entries as a list. Name must be an instance of TAG_String. """
         
         self.length, self.type, self.entries = data
         self.name = name
     
     @classmethod
     def read(cls, stream, named=False):
-        """ Read a TAG_List from the start of the given stream. Return the
-        name (if applicable), length (number of items), and the number of bytes
-        read. """
+        """ Return an instance of the class as read from the start of the given
+        stream, as well as the number of bytes read from the steam. """
         
         bytes_read = 0
         
@@ -200,13 +207,10 @@ class TAG_List(TAG):
         return cls((length, tag_type, entries), name), bytes_read
     
     def write(self, type_byte=True):
-        """ Return a binary string ready for writing to file. """
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
-        string = ''
-        if type_byte:
-            string += struct.pack('>b', self.byte)
-        if self.name:
-            string += self.name.write(False)
+        string = TAG.write(self, type_byte)
         string += TAG_Byte(self.type.byte).write(False)
         string += self.length.write(False)
         for entry in self.entries:
@@ -215,10 +219,11 @@ class TAG_List(TAG):
     
     def __str__(self):
         if self.name:
-            string = self.__class__.__name__ + '("' + self.name.data + '"): '
+            string =  '%s("%s"): ' % (self.__class__.__name__, self.name.data)
         else:
-            string = self.__class__.__name__ + ': '
-        string += str(self.length.data) + ' entries of type ' + self.type.__name__ + '\n'
+            string = '%s: ' % self.__class__.__name__
+        string += '%i entries of type %s\n' % (self.length.data,
+                                               self.type.__name__)
         string += '{\n'
         for entry in self.entries:
             string += str(entry) + '\n'
@@ -232,16 +237,17 @@ class TAG_Byte_Array(TAG):
     byte_type = TAG_Byte
     
     def __init__(self, data, name=None):
-        """ Create a new TAG_Byte_Array with the given length (number of
-        elements), bytes and optionally a name. """
+        """ Create a new TAG_Byte_Array with the given data and optional name.
+        Data must be a pair of TAG_Int (length of the list) and the bytes as a
+        list of TAG_Byte's. Name must be an instance of TAG_String. """
         
         self.length, self.bytes_array = data
         self.name = name
     
     @classmethod
     def read(cls, stream, named=False):
-        """ Read a TAG_Byte_Array from the start of the given stream. Return the
-        TAG_Byte_Array instance and the number of bytes read. """
+        """ Return an instance of the class as read from the start of the given
+        stream, as well as the number of bytes read from the steam. """
         
         bytes_read = 0
         
@@ -269,13 +275,10 @@ class TAG_Byte_Array(TAG):
         return cls((length, bytes_array), name), bytes_read
     
     def write(self, type_byte=True):
-        """ Return a binary string ready for writing to file. """
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
-        string = ''
-        if type_byte:
-            string += struct.pack('>b', self.byte)
-        if self.name:
-            string += self.name.write(False)
+        string = TAG.write(self, type_byte)
         string += self.length.write(False)
         for byte in self.bytes_array:
             string += byte.write(False)
@@ -283,10 +286,10 @@ class TAG_Byte_Array(TAG):
     
     def __str__(self):
         if self.name:
-            string = self.__class__.__name__ + '("' + self.name.data + '"): '
+            string = '%s("%s"): ' % (self.__class__.__name__, self.name.data)
         else:
-            string = self.__class__.__name__ + ': '
-        string += '[' + str(self.length.data) + ' bytes]'
+            string = '%s: ' % self.__class__.__name__
+        string += '[%i bytes]' % self.length.data
         return string
 
 class TAG_Compound(TAG):
@@ -294,18 +297,18 @@ class TAG_Compound(TAG):
     byte = 10
     
     def __init__(self, data, name=None):
-        """ Create a new TAG_Compound with the given entries, and optionally
-        a name. """
+        """ Create a new TAG_Compound with the given data and optional name.
+        Data must a list of TAG's, ending in a TAG_End. Name must be an instance
+        of TAG_String. """
         
         self.entries = data
-        self.length = len(self.entries) - 1 # don't include TAG_End
+        self.length = len(self.entries) - 1 # Don't include TAG_End
         self.name = name
     
     @classmethod
     def read(cls, stream, named=False):
-        """ Read a TAG_Compound from the start of the given stream. Return the
-        name (if applicable), the length (number of entries) and the number of
-        bytes read. """
+        """ Return an instance of the class as read from the start of the given
+        stream, as well as the number of bytes read from the steam. """
         
         bytes_read = 0
         
@@ -337,23 +340,20 @@ class TAG_Compound(TAG):
         return cls(entries, name), bytes_read
     
     def write(self, type_byte=True):
-        """ Return a binary string ready for writing to file. """
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
-        string = ''
-        if type_byte:
-            string += struct.pack('>b', self.byte)
-        if self.name:
-            string += self.name.write(False)
+        string = TAG.write(self, type_byte)
         for entry in self.entries:
             string += entry.write()
         return string
     
     def __str__(self):
         if self.name:
-            string = self.__class__.__name__ + '("' + self.name.data + '"): '
+            string = '%s("%s"): ' % (self.__class__.__name__, self.name.data)
         else:
-            string = self.__class__.__name__ + ': '
-        string += str(self.length) + ' entries\n'
+            string = '%s: ' % self.__class__.__name__
+        string += '%i entries\n' % self.length
         string += '{\n'
         for entry in self.entries:
             string += str(entry) + '\n'
@@ -367,38 +367,31 @@ class TAG_End(TAG):
     def __init__(self):
         """ Create a new TAG_End. """
         
-        pass
+        self.name = None
     
     def write(self):
-        """ Return a binary string ready for writing to file. """
+        """ Return a string ready for writing to file. If type_byte is true,
+        the tag type byte is written to the start of the string, o'wise not. """
         
-        string = struct.pack('>b', self.byte)
+        string = TAG.write(self, True)
         return string
     
     def __str__(self):
         return 'TAG_End'
 
 
-### TAG types ##################################################################
+### TAG Type Bytes #############################################################
 
-type_bytes = {0: TAG_End,
-              1: TAG_Byte,
-              2: TAG_Short,
-              3: TAG_Int,
-              4: TAG_Long,
-              5: TAG_Float,
-              6: TAG_Double,
-              7: TAG_Byte_Array,
-              8: TAG_String,
-              9: TAG_List,
-              10: TAG_Compound}
+type_bytes = {0: TAG_End, 1: TAG_Byte, 2: TAG_Short, 3: TAG_Int, 4: TAG_Long,
+              5: TAG_Float, 6: TAG_Double, 7: TAG_Byte_Array, 8: TAG_String,
+              9: TAG_List, 10: TAG_Compound}
 
 
-### TAG type byte reader #######################################################
+### Helper Function ############################################################
 
 def get_tag_type(stream):
-    """ Return the tag type directed by the first byte in the given stream
-    and the number of bytes read. """
+    """ Return the tag type class specified by the first byte in the given
+    stream, as well as the number of bytes read from the stream (one). """
     
     format = 'b'
     size = 1
@@ -409,19 +402,19 @@ def get_tag_type(stream):
     return tag_type, size
 
 
-### Parser class ###############################################################
+### Main NBT Parser Class ######################################################
 
 class nbt(object):
     
-    """ Named Binary Tag (nbt) file parser. """
+    """ Named Binary Tag (NBT) file parser. """
     
     def __init__(self):
-        """ Create a new nbt object. """
+        """ Create a new NBT object. """
         
         self.tags = []
     
     def read(self, stream):
-        """ Parse the given nbt file (ungzipped) and read it into memory. """
+        """ Parse the given (ungzipped) NBT file and read it into memory. """
         
         self.tags = []
         while len(stream) > 0:
@@ -430,7 +423,7 @@ class nbt(object):
             stream = stream[bytes:]
     
     def write(self):
-        """ Return a string ready to be written to file. """
+        """ Return a string ready for writing to file. """
         
         string = ''
         for tag in self.tags:
@@ -439,8 +432,8 @@ class nbt(object):
         return string
     
     def read_tag(self, stream):
-        """ Read the tag from the start of the given stream, and return the tag
-        type and the number of bytes read. """
+        """ Read the tag from the start of the given stream, and return the TAG
+        class instance and the number of bytes read from the steam. """
         
         bytes_read = 0
         
@@ -448,9 +441,7 @@ class nbt(object):
         stream = stream[bytes:]
         bytes_read += bytes
         
-        if type == TAG_End:
-            pass
-        else:
+        if type != TAG_End:
             tag, bytes = type.read(stream, True)
             stream = stream[bytes:]
             bytes_read += bytes
