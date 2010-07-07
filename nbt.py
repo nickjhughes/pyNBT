@@ -239,7 +239,7 @@ class TAG_Byte_Array(TAG):
     def __init__(self, data, name=None):
         """ Create a new TAG_Byte_Array with the given data and optional name.
         Data must be a pair of TAG_Int (length of the list) and the bytes as a
-        list of TAG_Byte's. Name must be an instance of TAG_String. """
+        list of bytes. Name must be an instance of TAG_String. """
         
         self.length, self.bytes_array = data
         self.name = name
@@ -265,12 +265,10 @@ class TAG_Byte_Array(TAG):
         bytes_read += bytes
         
         # Read bytes
-        bytes_array = []
-        for i in xrange(length.data):
-            byte, bytes = cls.byte_type.read(stream, False)
-            bytes_array.append(byte)
-            stream = stream[bytes:]
-            bytes_read += bytes
+        format = '>' + cls.byte_type.format*length.data
+        size = cls.byte_type.size*length.data
+        bytes_array = struct.unpack(format, stream[:size])
+        bytes_read += size
         
         return cls((length, bytes_array), name), bytes_read
     
@@ -280,8 +278,8 @@ class TAG_Byte_Array(TAG):
         
         string = TAG.write(self, type_byte)
         string += self.length.write(False)
-        for byte in self.bytes_array:
-            string += byte.write(False)
+        format = '>' + self.byte_type.format*self.length.data
+        string += struct.pack(format, *self.bytes_array)
         return string
     
     def __str__(self):
@@ -302,7 +300,7 @@ class TAG_Compound(TAG):
         of TAG_String. """
         
         self.entries = data
-        self.length = len(self.entries) - 1 # Don't include TAG_End
+        self.length = len(self.entries) - 1 # Don't include TAG_End in count
         self.name = name
     
     @classmethod
@@ -431,6 +429,12 @@ class nbt(object):
         
         return string
     
+    def display(self):
+        """ Print out a representation of the NBT data structure. """
+        
+        for tag in self.tags:
+            print tag
+    
     def read_tag(self, stream):
         """ Read the tag from the start of the given stream, and return the TAG
         class instance and the number of bytes read from the steam. """
@@ -445,6 +449,5 @@ class nbt(object):
             tag, bytes = type.read(stream, True)
             stream = stream[bytes:]
             bytes_read += bytes
-            print tag
         
         return tag, bytes_read
