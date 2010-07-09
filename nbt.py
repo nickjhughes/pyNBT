@@ -206,6 +206,12 @@ class TAG_List(TAG):
         
         return cls((length, tag_type, entries), name), bytes_read
     
+    def add_entry(self, entry):
+        """ Add the given entry to the list. Entry must be the correct type. """
+        
+        self.length.data += 1
+        self.entries.append(entry)
+    
     def write(self, type_byte=True):
         """ Return a string ready for writing to file. If type_byte is true,
         the tag type byte is written to the start of the string, o'wise not. """
@@ -296,11 +302,10 @@ class TAG_Compound(TAG):
     
     def __init__(self, data, name=None):
         """ Create a new TAG_Compound with the given data and optional name.
-        Data must a list of TAG's, ending in a TAG_End. Name must be an instance
-        of TAG_String. """
+        Data must a list of TAG's. Name must be an instance of TAG_String. """
         
         self.entries = data
-        self.length = len(self.entries) - 1 # Don't include TAG_End in count
+        self.length = len(self.entries)
         self.name = name
     
     @classmethod
@@ -319,19 +324,20 @@ class TAG_Compound(TAG):
             name = None
         
         # Read entries
-        entries = []
+        # Note: It's okay to index the entries by name, as the NBT spec states
+        #       that the names must be unqiue within each TAG_Compound.
+        entries = {}
         while True:
             # Tag type
             tag_type, bytes = get_tag_type(stream)
             bytes_read += bytes
             stream = stream[bytes:]
-            # End of compound tag
+            # End of TAG_Compound
             if tag_type == TAG_End:
-                entries.append(TAG_End())
                 break
             # Tag data
             entry, bytes = tag_type.read(stream, True)
-            entries.append(entry)
+            entries[entry.name.data] = entry
             bytes_read += bytes
             stream = stream[bytes:]
         
@@ -342,8 +348,9 @@ class TAG_Compound(TAG):
         the tag type byte is written to the start of the string, o'wise not. """
         
         string = TAG.write(self, type_byte)
-        for entry in self.entries:
+        for entry in self.entries.values():
             string += entry.write()
+        string += TAG_End().write()
         return string
     
     def __str__(self):
@@ -353,7 +360,7 @@ class TAG_Compound(TAG):
             string = '%s: ' % self.__class__.__name__
         string += '%i entries\n' % self.length
         string += '{\n'
-        for entry in self.entries:
+        for entry in self.entries.values():
             string += str(entry) + '\n'
         string += '}'
         return string

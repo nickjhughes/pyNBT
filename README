@@ -1,2 +1,4 @@
 
-pyNBT README
+pyNBT
+
+A Python parser for the Named Binary Tag (NBT) format.
