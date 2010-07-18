@@ -223,6 +223,20 @@ class TAG_List(TAG):
             string += entry.write(False)
         return string
     
+    def __getitem__(self, item):
+        """ Provide access to the entries list directly. """
+        
+        return self.entries[item]
+    
+    def __setitem__(self, item, value):
+        """ Provide access to the entries list directly. Given TAG cannot be
+        named (as specificed by nbt.txt). """
+        
+        if not isinstance(value, TAG):
+            raise ValueError('Given value must be a TAG.')
+        
+        self.entries[item] = value
+    
     def __str__(self):
         if self.name:
             string =  '%s("%s"): ' % (self.__class__.__name__, self.name.data)
@@ -288,6 +302,16 @@ class TAG_Byte_Array(TAG):
         string += struct.pack(format, *self.bytes_array)
         return string
     
+    def __getitem__(self, item):
+        """ Provide access to the byte array directly. """
+        
+        return self.bytes_array[item]
+    
+    def __setitem__(self, item, value):
+        """ Provide access to the byte array directly. """
+        
+        self.entries[item] = value
+    
     def __str__(self):
         if self.name:
             string = '%s("%s"): ' % (self.__class__.__name__, self.name.data)
@@ -352,6 +376,29 @@ class TAG_Compound(TAG):
             string += entry.write()
         string += TAG_End().write()
         return string
+    
+    def __getitem__(self, item):
+        """ Provide access to the entries dict directly. """
+        
+        if isinstance(item, str):
+            return self.entries[item]
+        else:
+            raise ValueError('TAG_Compound entries are indexed by TAG names.')
+    
+    def __setitem__(self, item, value):
+        """ Provide access to the entries dict directly. Provided TAG name must
+        be the same as the given index. """
+        
+        if not isinstance(item, str):
+            raise ValueError('TAG_Compound entries are indexed by TAG names.')
+        
+        if not isinstance(value, TAG):
+            raise ValueError('Given value must be a TAG.')
+        
+        if value.name.data != item:
+            raise ValueError('TAG name must match index.')
+        
+        self.entries[item] = value
     
     def __str__(self):
         if self.name:
