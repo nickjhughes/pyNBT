@@ -505,3 +505,17 @@ class nbt(object):
             bytes_read += bytes
         
         return tag, bytes_read
+    
+    def __getitem__(self, item):
+        """ Provide access to the tags list directly. """
+        
+        return self.tags[item]
+    
+    def __setitem__(self, item, value):
+        """ Provide access to the tags list directly. Given value must be a
+        TAG. """
+        
+        if not isinstance(value, TAG):
+            raise ValueError('Given value must be a TAG.')
+        
+        self.entries[item] = value
